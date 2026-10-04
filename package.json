@@ -1,0 +1,35 @@
+{
+  "name": "propertyhub",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c green,blue \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node --env-file-if-exists=.env server.js",
+    "dev:client": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "start": "node --env-file-if-exists=.env server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@fontsource/dm-sans": "^5.2.6",
+    "@fontsource/fraunces": "^5.2.6",
+    "bcryptjs": "^3.0.2",
+    "compression": "^1.8.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "lucide": "^0.468.0",
+    "socket.io": "^4.8.4",
+    "socket.io-client": "^4.8.4",
+    "three": "^0.186.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "vite": "^7.2.2"
+  }
+}

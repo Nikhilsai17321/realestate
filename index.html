@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="PropertyHub — discover distinctive homes and spaces around the world.">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>PropertyHub | A World of Remarkable Places</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <meta name="theme-color" content="#101010">
+  <link rel="stylesheet" href="/node_modules/@fontsource/dm-sans/400.css">
+  <link rel="stylesheet" href="/node_modules/@fontsource/dm-sans/500.css">
+  <link rel="stylesheet" href="/node_modules/@fontsource/dm-sans/600.css">
+  <link rel="stylesheet" href="/node_modules/@fontsource/fraunces/600.css">
+  <link rel="stylesheet" href="/node_modules/@fontsource/fraunces/700.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <a class="skip-link" href="#mainContent">Skip to content</a>
+  <div class="app-scroll-progress" id="appScrollProgress" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="#mainContent" aria-label="PropertyHub home"><span class="brand-mark">P</span><span>property<span>hub</span></span></a>
+    <div class="topbar-location"><i data-lucide="globe-2"></i><span data-i18n="worldwide">Worldwide discovery</span><span class="location-dot"></span></div>
+    <div class="topbar-search"><i data-lucide="search"></i><input id="globalSearch" type="search" placeholder="Search city, area, or property" aria-label="Search properties" data-i18n-placeholder="searchPlaceholder" data-i18n-aria="searchProperties"><kbd>⌘ K</kbd></div>
+    <div class="topbar-actions">
+      <label class="locale-select" aria-label="Site language"><i data-lucide="globe-2"></i><select id="languageSelect" aria-label="Site language"><option value="en">English</option><option value="hi">हिन्दी</option><option value="es">Español</option><option value="fr">Français</option><option value="ar">العربية</option><option value="zh">中文</option><option value="pt">Português</option><option value="de">Deutsch</option><option value="ja">日本語</option><option value="it">Italiano</option></select></label>
+      <span class="live-status" id="liveStatus"><span></span>Connecting</span>
+      <button class="icon-button theme-button" id="themeToggle" type="button" aria-label="Toggle color theme" title="Toggle color theme"><i data-lucide="sun"></i></button>
+      <button class="sign-in-button" id="authOpen" type="button" data-i18n="signIn">Sign in</button>
+      <button class="avatar-button" id="profileButton" type="button" aria-label="Account menu" hidden><span id="avatarLetter">P</span></button>
+    </div>
+    <button class="icon-button mobile-menu-button" id="mobileMenuToggle" type="button" aria-label="Open navigation" aria-expanded="false"><i data-lucide="menu"></i></button>
+  </header>
+
+  <div class="workspace">
+    <aside class="sidebar" id="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-label" data-i18n="workspace">WORKSPACE</div>
+      <nav class="side-nav">
+        <button class="side-link active" data-view="discover"><i data-lucide="compass"></i><span data-i18n="discover">Discover</span><kbd>D</kbd></button>
+        <button class="side-link" data-view="saved"><i data-lucide="bookmark"></i><span data-i18n="savedHomes">Saved homes</span><span class="side-count" id="savedCount">0</span></button>
+        <button class="side-link" data-view="inquiries"><i data-lucide="messages-square"></i><span data-i18n="myEnquiries">My enquiries</span></button>
+        <button class="side-link" data-view="about"><i data-lucide="info"></i><span data-i18n="about">About</span></button>
+      </nav>
+      <div class="sidebar-rule"></div>
+      <div class="sidebar-label" data-i18n="propertyType">PROPERTY TYPE</div>
+      <div class="filter-options" id="typeFilters">
+        <label><input type="checkbox" value="Apartment"><span class="checkmark"></span><span data-i18n="apartment">Apartment</span></label>
+        <label><input type="checkbox" value="Villa"><span class="checkmark"></span><span data-i18n="villa">Villa</span></label>
+        <label><input type="checkbox" value="House"><span class="checkmark"></span><span data-i18n="house">House</span></label>
+        <label><input type="checkbox" value="Plot"><span class="checkmark"></span><span data-i18n="plot">Plot</span></label>
+        <label><input type="checkbox" value="Office"><span class="checkmark"></span><span data-i18n="office">Office</span></label>
+        <label><input type="checkbox" value="Retail"><span class="checkmark"></span><span data-i18n="retail">Retail</span></label>
+      </div>
+      <div class="sidebar-rule"></div>
+      <div class="sidebar-label" data-i18n="yourSpace">YOUR SPACE</div>
+      <div class="workspace-note"><span class="workspace-note-mark"><i data-lucide="map"></i></span><p data-i18n="explore3d">Explore property locations on the map.</p><button id="resetMap" type="button"><span data-i18n="resetView">Go to map</span> <i data-lucide="arrow-up-right"></i></button></div>
+      <div class="sidebar-bottom"><span class="sample-pulse"></span><span data-i18n="globalInventory">Illustrative inventory · Worldwide</span></div>
+      <button class="side-link admin-link" data-view="admin" id="adminNav" hidden><i data-lucide="shield-check"></i><span>Admin desk</span></button>
+    </aside>
+
+    <main id="mainContent" class="main-content">
+      <section class="view-panel active" id="discoverView" aria-labelledby="pageTitle">
+        <div class="page-heading">
+          <div><div class="eyebrow"><span class="eyebrow-line"></span><span data-i18n="heroKicker">A WORLD OF REMARKABLE PLACES</span> <span class="eyebrow-date" id="todayLabel"></span></div><h1 id="pageTitle" data-i18n-html="heroTitle">Live <em>somewhere</em> extraordinary.</h1><p class="page-subtitle" data-i18n="heroSubtitle">Discover distinctive homes and spaces, wherever life takes you.</p></div>
+          <button class="button button-outline list-property-action" id="listPropertyButton" type="button"><i data-lucide="plus"></i><span data-i18n="listProperty">List a property</span></button>
+        </div>
+
+        <div class="search-toolbar">
+          <div class="mode-switch" role="tablist" aria-label="Listing purpose">
+            <button class="mode-button active" type="button" role="tab" aria-selected="true" data-mode="buy" data-i18n="buy">Buy</button>
+            <button class="mode-button" type="button" role="tab" aria-selected="false" data-mode="rent" data-i18n="rent">Rent</button>
+            <button class="mode-button" type="button" role="tab" aria-selected="false" data-mode="commercial" data-i18n="commercial">Commercial</button>
+          </div>
+          <label class="currency-select"><span data-i18n="marketCurrency">Market currency</span><select id="currencyFilter" aria-label="Market currency"><option value="all" selected data-i18n="allCurrencies">All currencies</option><option value="INR">INR · India</option><option value="USD">USD · United States</option><option value="EUR">EUR · Eurozone</option><option value="GBP">GBP · United Kingdom</option><option value="AED">AED · United Arab Emirates</option><option value="CAD">CAD · Canada</option><option value="AUD">AUD · Australia</option><option value="SGD">SGD · Singapore</option><option value="JPY">JPY · Japan</option><option value="CHF">CHF · Switzerland</option><option value="ZAR">ZAR · South Africa</option><option value="BRL">BRL · Brazil</option><option value="MXN">MXN · Mexico</option><option value="NZD">NZD · New Zealand</option><option value="CNY">CNY · China</option><option value="KRW">KRW · South Korea</option><option value="SAR">SAR · Saudi Arabia</option><option value="THB">THB · Thailand</option><option value="IDR">IDR · Indonesia</option><option value="SEK">SEK · Sweden</option><option value="TRY">TRY · Türkiye</option></select><i data-lucide="chevron-down"></i></label>
+          <label class="budget-select"><span data-i18n="budget">Budget</span><select id="budgetFilter" aria-label="Maximum budget"><option value="all" data-i18n="anyBudget">Any budget</option></select><i data-lucide="chevron-down"></i></label>
+          <button class="icon-button filter-reset" id="clearFilters" type="button" aria-label="Clear filters" title="Clear filters" data-i18n-aria="clearFilters"><i data-lucide="list-filter"></i></button>
+          <div class="view-toggle" role="group" aria-label="Listing display mode"><button class="view-toggle-button active" id="mapViewToggle" type="button" aria-label="Map view"><i data-lucide="map"></i></button><button class="view-toggle-button" id="listViewToggle" type="button" aria-label="List view"><i data-lucide="layout-grid"></i></button></div>
+        </div>
+
+        <div class="scene-heading"><div><span class="scene-kicker"><i data-lucide="map-pin"></i> <span>PROPERTY LOCATIONS</span></span><span class="scene-region" id="mapRegion">Select a property to see its location</span></div><div class="scene-heading-actions"><button class="button button-outline map-action" id="backToResults" type="button"><i data-lucide="arrow-down"></i>Back to results</button><button class="button button-outline map-action" id="currentLocationDirections" type="button"><i data-lucide="navigation"></i>Directions from me</button><button class="button button-outline map-action" id="backToDiscover" type="button"><i data-lucide="house"></i>Discover</button></div></div>
+
+        <section class="scene-frame real-map-frame" id="sceneFrame" aria-label="Real map showing the selected property location">
+          <iframe id="propertyMap" title="OpenStreetMap property location" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+          <div class="map-approximate-note" id="mapAccuracyNote">Pin shows the city centre, not the property parcel. In Directions, choose your current location as the start.</div>
+          <a class="map-provider-link" id="mapProviderLink" target="_blank" rel="noopener noreferrer">Open larger map ↗</a>
+        </section>
+
+        <section class="results-section" aria-labelledby="resultsHeading">
+          <div class="results-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span><span data-i18n="globalEdition">WORLD EDITION · ILLUSTRATIVE SAMPLE LISTINGS</span></div><h2 id="resultsHeading" data-i18n-html="resultsTitle">Considered <em>properties.</em></h2></div><div class="results-meta"><span id="resultCount">Loading homes</span><span class="result-separator"></span><button id="sortButton" type="button"><span data-i18n="featured">Featured</span> <i data-lucide="arrow-down-up"></i></button></div></div>
+          <div class="listing-grid" id="listingGrid" aria-live="polite"><div class="listing-skeleton"></div><div class="listing-skeleton"></div><div class="listing-skeleton"></div></div>
+          <div class="empty-state" id="emptyState" hidden><i data-lucide="search-x"></i><h3 data-i18n="noMatches">No listings match.</h3><p data-i18n="trySearch">Try another city or clear your filters.</p><button class="button button-dark" id="emptyClear" type="button" data-i18n="clearFiltersText">Clear filters</button></div>
+        </section>
+        <footer class="page-footer"><span>PropertyHub <span class="footer-dot"></span> <span data-i18n="worldwide">Worldwide discovery</span></span><span data-i18n="sampleNotice">Illustrative sample inventory · verify details and availability</span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">Map data © OpenStreetMap contributors</a></footer>
+      </section>
+
+      <section class="view-panel secondary-view" id="savedView" hidden><div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span>YOUR COLLECTION</div><h1>Saved <em>homes.</em></h1><p class="page-subtitle">Keep the places you want to come back to.</p></div><button class="button button-outline" data-view="discover" type="button"><i data-lucide="arrow-left"></i>Back to discover</button></div><div class="listing-grid" id="savedGrid"></div><div class="empty-state" id="savedEmpty"><i data-lucide="bookmark-x"></i><h3>Your shortlist starts here.</h3><p>Sign in to save homes across your devices.</p><button class="button button-dark" id="savedSignIn" type="button">Sign in to sync saved homes</button></div></section>
+
+      <section class="view-panel secondary-view" id="inquiriesView" hidden><div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span>YOUR CONVERSATIONS</div><h1>My <em>enquiries.</em></h1><p class="page-subtitle">Property conversations are stored securely with your account.</p></div><button class="button button-outline" data-view="discover" type="button"><i data-lucide="arrow-left"></i>Back to discover</button></div><div class="inquiry-list" id="myInquiryList"></div><div class="empty-state" id="inquiriesEmpty"><i data-lucide="messages-square"></i><h3>No enquiries yet.</h3><p>Your property conversations will appear here.</p><button class="button button-dark" data-view="discover" type="button">Explore homes</button></div></section>
+
+      <section class="view-panel secondary-view about-view" id="aboutView" hidden aria-labelledby="aboutTitle">
+        <div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span>PROPERTYHUB</div><h1 id="aboutTitle">A clearer way to find <em>your place.</em></h1><p class="page-subtitle">A global property discovery site built around useful details, transparent listings, and direct enquiries.</p></div><button class="button button-outline" data-view="discover" type="button"><i data-lucide="arrow-left"></i>Back to discover</button></div>
+        <div class="about-grid">
+          <article class="about-card about-intro"><span class="about-card-kicker">ABOUT THE SITE</span><h2>Property discovery, with clarity.</h2><p>PropertyHub helps people explore homes and commercial spaces across cities and countries. Search by place and property type, compare prices in each listing’s local currency, save homes, and send an enquiry when you want to know more.</p><p>PropertyHub is an independent property discovery project. Listings shown as illustrative demos are fictional and are not offers for sale or rent.</p><button class="button button-dark" data-view="discover" type="button">Explore properties <i data-lucide="arrow-up-right"></i></button></article>
+          <article class="about-card about-contact"><span class="about-card-kicker">GET IN TOUCH</span><h2>Contact</h2><p>Questions about PropertyHub or a listing? Reach the site contact using either channel.</p><a class="about-contact-link" href="mailto:nsai82563@gmail.com"><i data-lucide="mail"></i><span><small>Email</small>nsai82563@gmail.com</span><i class="about-link-arrow" data-lucide="arrow-up-right"></i></a><a class="about-contact-link" href="tel:9515658995"><i data-lucide="phone"></i><span><small>Phone</small>9515658995</span><i class="about-link-arrow" data-lucide="arrow-up-right"></i></a><p class="about-contact-note">Phone and email links open your device’s default apps.</p></article>
+          <article class="about-card"><span class="about-card-kicker">HOW LISTINGS WORK</span><h2>Know what you’re viewing.</h2><ul><li>Demo homes are labelled as illustrative and should not be treated as real offers.</li><li>Non-demo listings require an admin review and are hidden if they have not been rechecked in 30 days.</li><li>PropertyHub does not copy listings automatically from other portals; listings must be authorized before publication.</li><li>Prices appear in each listing’s native currency. PropertyHub does not convert currencies.</li></ul></article>
+          <article class="about-card"><span class="about-card-kicker">BUILT FOR DISCOVERY</span><h2>Explore across borders.</h2><p>Browse listings across multiple markets, switch the interface language, view city maps, and use map directions to continue in your preferred mapping service. Map pins can be approximate; confirm a property’s exact address and availability with its listing contact.</p><div class="about-language-list"><span>English</span><span>हिन्दी</span><span>Español</span><span>Français</span><span>العربية</span><span>中文</span><span>Português</span><span>Deutsch</span><span>日本語</span><span>Italiano</span></div></article>
+        </div>
+      </section>
+
+      <section class="view-panel secondary-view admin-view" id="adminView" hidden><div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span>PRIVATE WORKSPACE</div><h1>Admin <em>desk.</em></h1><p class="page-subtitle">Manage listings and review new property enquiries.</p></div><button class="button button-dark" id="adminAddListing" type="button"><i data-lucide="plus"></i>New listing</button></div><div class="admin-stats" id="adminStats"></div><div class="admin-content"><section><div class="admin-section-heading"><h2>Recent enquiries</h2><span id="adminInquiryCount">0 received</span></div><div class="admin-inquiries" id="adminInquiryList"></div></section><section><div class="admin-section-heading"><h2>Property inventory</h2><span>Updates sync live</span></div><div class="admin-listings" id="adminListingList"></div></section></div></section>
+    </main>
+
+    <aside class="property-inspector" id="propertyInspector" aria-label="Selected property details">
+      <div class="inspector-topline"><span><span class="availability-dot"></span> SELECTED PROPERTY</span><div class="inspector-actions"><button class="icon-button" id="copyPropertyLink" type="button" aria-label="Copy property link" title="Copy property link"><i data-lucide="copy"></i></button><button class="icon-button inspector-close" id="closeInspector" type="button" aria-label="Hide property details"><i data-lucide="panel-right-close"></i></button></div></div>
+      <div class="inspector-image-wrap"><img id="inspectorImage" src="" alt=""><span class="inspector-photo-index"><i data-lucide="image"></i> 01 / 08</span><button class="icon-button inspector-save" id="inspectorSave" type="button" aria-label="Save selected property"><i data-lucide="bookmark"></i></button></div>
+      <div class="inspector-content"><div class="inspector-property-type" id="inspectorType">FEATURED HOME</div><div class="inspector-title-row"><h2 id="inspectorTitle">Choose a property</h2><span id="inspectorPrice">—</span></div><p class="inspector-location"><i data-lucide="map-pin"></i><span id="inspectorLocation">Explore the map to begin</span></p><div class="inspector-stats" id="inspectorStats"></div><p class="inspector-description" id="inspectorDescription">Select any highlighted home in the neighbourhood to see its details.</p><a class="inspector-source" id="inspectorSource" href="#" target="_blank" rel="noopener noreferrer" hidden>View source on 99acres <i data-lucide="arrow-up-right"></i></a><div class="inspector-divider"></div><div class="agent-row"><div class="agent-avatar">A</div><div><strong>PropertyHub team</strong><span>Local property contact</span></div><span class="agent-online"><i></i> Available</span></div><button class="button button-coral enquiry-button" id="enquireButton" type="button"><i data-lucide="send"></i>Enquire about this home</button><p class="sample-disclaimer" id="listingDisclaimer"><i data-lucide="badge-info"></i> Sample listing. Details and availability are illustrative.</p></div>
+    </aside>
+  </div>
+
+  <dialog class="app-dialog" id="authDialog" aria-labelledby="authTitle">
+    <form class="dialog-card" id="authForm">
+      <button class="dialog-close" type="button" data-close-dialog aria-label="Close"><i data-lucide="x"></i></button>
+      <div class="dialog-brand"><span class="brand-mark">P</span><span>property<span>hub</span></span></div>
+      <div class="eyebrow"><span class="eyebrow-line"></span>YOUR PROPERTY WORKSPACE</div>
+      <h2 id="authTitle">Welcome <em>back.</em></h2>
+      <p class="dialog-intro" id="authIntro">Sign in to keep your favourite homes close.</p>
+      <label class="field-label" id="nameField" hidden><span data-i18n="name">Name</span><input name="name" autocomplete="name" minlength="2" maxlength="80" placeholder="Your name" data-i18n-placeholder="yourName"></label>
+      <label class="field-label" id="authEmailField"><span data-i18n="email">Email address</span><input id="authEmailInput" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="you@example.com" data-i18n-placeholder="emailPlaceholder"></label>
+      <label class="field-label" id="authPasswordField"><span data-i18n="password">Password</span><span class="password-field"><input name="password" type="password" autocomplete="current-password" required minlength="12" maxlength="128" placeholder="At least 12 characters" data-i18n-placeholder="passwordPlaceholder"><button class="password-toggle" type="button" data-toggle-password aria-label="Show password" aria-pressed="false"><i data-lucide="eye"></i></button></span></label>
+      <ul class="password-rules" id="passwordRules" hidden aria-label="Password requirements">
+        <li data-i18n="ruleLength">Use at least 12 characters.</li>
+        <li data-i18n="ruleComplexity">Include uppercase and lowercase letters, a number, and a symbol.</li>
+        <li data-i18n="ruleCommon">Avoid common passwords and sequences such as “1234” or “abcd”.</li>
+        <li data-i18n="rulePersonal">Do not include your name or email address.</li>
+      </ul>
+      <label class="field-label" id="authPasswordConfirmField" hidden><span data-i18n="confirmPassword">Confirm new password</span><span class="password-field"><input name="passwordConfirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" placeholder="Enter the new password again" data-i18n-placeholder="confirmPasswordPlaceholder"><button class="password-toggle" type="button" data-toggle-password aria-label="Show password" aria-pressed="false"><i data-lucide="eye"></i></button></span></label>
+      <p class="form-error" id="authError" role="alert" hidden></p>
+      <p class="dialog-status" id="authStatus" role="status" aria-live="polite" hidden></p>
+      <button class="button button-dark dialog-submit" type="submit" id="authSubmit">Sign in</button>
+      <button class="text-action" type="button" id="forgotPasswordOpen" data-i18n="forgotPassword">Forgot your password?</button>
+      <button class="text-action" type="button" id="authModeToggle">New to PropertyHub? Create an account</button>
+      <p class="dialog-security"><i data-lucide="lock-keyhole"></i> Protected account · encrypted session</p>
+    </form>
+  </dialog>
+
+  <dialog class="app-dialog" id="inquiryDialog" aria-labelledby="inquiryTitle"><form class="dialog-card" id="inquiryForm"><button class="dialog-close" type="button" data-close-dialog aria-label="Close"><i data-lucide="x"></i></button><div class="eyebrow"><span class="eyebrow-line"></span>START A CONVERSATION</div><h2 id="inquiryTitle">Ask about <em>this home.</em></h2><p class="dialog-intro" id="inquiryProperty"></p><label class="field-label">Your name<input name="name" autocomplete="name" required minlength="2" maxlength="80" placeholder="Name"></label><label class="field-label">Email address<input name="email" type="email" autocomplete="email" required maxlength="254" placeholder="you@example.com"></label><label class="field-label">Phone number<input name="phone" type="tel" autocomplete="tel" required minlength="7" maxlength="30" placeholder="Include country code"></label><label class="field-label">Message<textarea name="message" required minlength="10" maxlength="2000" rows="4" placeholder="I'd like to arrange a viewing..."></textarea></label><p class="form-error" id="inquiryError" role="alert" hidden></p><button class="button button-dark dialog-submit" type="submit">Send enquiry <i data-lucide="arrow-up-right"></i></button><p class="dialog-security"><i data-lucide="shield-check"></i> Your enquiry is stored in this PropertyHub database.</p></form></dialog>
+
+  <dialog class="app-dialog" id="listingDialog" aria-labelledby="listingTitle"><form class="dialog-card listing-dialog" id="listingForm"><button class="dialog-close" type="button" data-close-dialog aria-label="Close"><i data-lucide="x"></i></button><div class="eyebrow"><span class="eyebrow-line"></span>ADMIN · INVENTORY</div><h2 id="listingTitle">Add a <em>property.</em></h2><p class="dialog-intro">Only publish listings you have permission to use. Confirm the address, price, availability, and source before publishing.</p><div class="form-grid"><label class="field-label">Property title<input name="title" required minlength="4" maxlength="100" placeholder="The Garden House"></label><label class="field-label">Area / neighbourhood<input name="location" required minlength="2" maxlength="100" placeholder="Banjara Hills"></label><label class="field-label">City<input name="city" required minlength="2" maxlength="80" value="Hyderabad"></label><label class="field-label">Listing type<select name="mode"><option value="buy">For sale</option><option value="rent">For rent</option><option value="commercial">Commercial</option></select></label><label class="field-label">Property kind<select name="type"><option>Apartment</option><option>Villa</option><option>House</option><option>Plot</option><option>Office</option><option>Retail</option></select></label><label class="field-label">Price<input name="price" type="number" min="0.01" step="0.01" required placeholder="Price in lakhs / monthly lakhs"></label><label class="field-label">Bedrooms<input name="beds" type="number" min="0" max="30" value="2"></label><label class="field-label">Bathrooms<input name="baths" type="number" min="0" max="30" value="2"></label><label class="field-label">Area (sq.ft)<input name="area" type="number" min="1" required placeholder="1500"></label><label class="field-label full-field">Photo URL<input name="image" type="url" required value="https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=900&q=80"></label><label class="field-label full-field">Source / authorization URL<input name="sourceUrl" type="url" maxlength="500" placeholder="Owner/developer listing or authorized feed"></label><label class="field-label full-field">Description<textarea name="description" required minlength="12" maxlength="1200" rows="3" placeholder="Describe the property accurately."></textarea></label><label class="listing-confirm full-field"><input name="verified" type="checkbox" required><span>I confirmed this listing is authorized, unique, available, and that its price and location are current.</span></label></div><p class="form-error" id="listingError" role="alert" hidden></p><button class="button button-dark dialog-submit" type="submit">Verify and publish <i data-lucide="arrow-up-right"></i></button></form></dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <button class="back-to-top" id="backToTop" type="button" aria-label="Back to top" title="Back to top"><i data-lucide="arrow-up"></i></button>
+  <div class="mobile-tabbar" aria-label="Mobile navigation"><button class="mobile-tab active" data-view="discover" type="button"><i data-lucide="compass"></i><span>Explore</span></button><button class="mobile-tab" data-view="saved" type="button"><i data-lucide="bookmark"></i><span>Saved</span></button><button class="mobile-tab" data-view="inquiries" type="button"><i data-lucide="messages-square"></i><span>Enquiries</span></button><button class="mobile-tab" data-view="about" type="button"><i data-lucide="info"></i><span data-i18n="about">About</span></button><button class="mobile-tab" id="mobileAccount" type="button"><i data-lucide="user-round"></i><span>Account</span></button></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
