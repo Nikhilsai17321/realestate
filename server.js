@@ -1,11 +1,10 @@
 import { createServer } from "node:http";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DatabaseSync } from "node:sqlite";
 import bcrypt from "bcryptjs";
 import compression from "compression";
+import { Database } from "./database.js";
 import express from "express";
 import { rateLimit } from "express-rate-limit";
 import helmet from "helmet";
@@ -15,7 +14,8 @@ import { z } from "zod";
 const root = dirname(fileURLToPath(import.meta.url));
 const production = process.env.NODE_ENV === "production";
 const port = Number(process.env.PORT || 3000);
-const appOrigin = process.env.APP_ORIGIN || (production ? `http://127.0.0.1:${port}` : "http://127.0.0.1:5173");
+const vercelHost = production ? process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL : process.env.VERCEL_URL;
+const appOrigin = process.env.APP_ORIGIN || (vercelHost ? `https://${vercelHost}` : production ? `http://127.0.0.1:${port}` : "http://127.0.0.1:5173");
 const sessionSecret = process.env.SESSION_SECRET || randomBytes(32).toString("hex");
 const cookieName = production ? "__Host-propertyhub" : "propertyhub_session";
 const sessionDuration = 7 * 24 * 60 * 60 * 1000;
@@ -28,13 +28,8 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error("PORT must be a valid TCP port.");
 }
 
-const dataDirectory = resolve(root, "data");
-mkdirSync(dataDirectory, { recursive: true });
-const databasePath = resolve(process.env.DATABASE_PATH || resolve(dataDirectory, "propertyhub.sqlite"));
-mkdirSync(dirname(databasePath), { recursive: true });
-const database = new DatabaseSync(databasePath);
-database.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
-database.exec(`
+const database = new Database();
+await database.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -99,23 +94,24 @@ database.exec(`
   );
   CREATE INDEX IF NOT EXISTS inquiries_created ON inquiries(created_at DESC);
 `);
-if (!database.prepare("PRAGMA table_info(listings)").all().some((column) => column.name === "country")) {
-  database.exec("ALTER TABLE listings ADD COLUMN country TEXT NOT NULL DEFAULT 'India'");
+await database.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_email_ci ON users (lower(email))");
+if (!(await database.prepare("PRAGMA table_info(listings)").all()).some((column) => column.name === "country")) {
+  await database.exec("ALTER TABLE listings ADD COLUMN country TEXT NOT NULL DEFAULT 'India'");
 }
-if (!database.prepare("PRAGMA table_info(listings)").all().some((column) => column.name === "currency")) {
-  database.exec("ALTER TABLE listings ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR'");
+if (!(await database.prepare("PRAGMA table_info(listings)").all()).some((column) => column.name === "currency")) {
+  await database.exec("ALTER TABLE listings ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR'");
 }
-if (!database.prepare("PRAGMA table_info(listings)").all().some((column) => column.name === "area_unit")) {
-  database.exec("ALTER TABLE listings ADD COLUMN area_unit TEXT NOT NULL DEFAULT 'sqft'");
+if (!(await database.prepare("PRAGMA table_info(listings)").all()).some((column) => column.name === "area_unit")) {
+  await database.exec("ALTER TABLE listings ADD COLUMN area_unit TEXT NOT NULL DEFAULT 'sqft'");
 }
-if (!database.prepare("PRAGMA table_info(listings)").all().some((column) => column.name === "source_url")) {
-  database.exec("ALTER TABLE listings ADD COLUMN source_url TEXT");
+if (!(await database.prepare("PRAGMA table_info(listings)").all()).some((column) => column.name === "source_url")) {
+  await database.exec("ALTER TABLE listings ADD COLUMN source_url TEXT");
 }
-if (!database.prepare("PRAGMA table_info(listings)").all().some((column) => column.name === "verified_at")) {
-  database.exec("ALTER TABLE listings ADD COLUMN verified_at TEXT");
+if (!(await database.prepare("PRAGMA table_info(listings)").all()).some((column) => column.name === "verified_at")) {
+  await database.exec("ALTER TABLE listings ADD COLUMN verified_at TEXT");
 }
-if (!database.prepare("PRAGMA table_info(inquiries)").all().some((column) => column.name === "user_id")) {
-  database.exec("ALTER TABLE inquiries ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL");
+if (!(await database.prepare("PRAGMA table_info(inquiries)").all()).some((column) => column.name === "user_id")) {
+  await database.exec("ALTER TABLE inquiries ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL");
 }
 
 const sampleListings = [
@@ -167,17 +163,30 @@ const insertListing = database.prepare(`INSERT OR IGNORE INTO listings
   (id,title,location,city,country,currency,mode,type,price,price_label,beds,baths,area,image,scene_x,scene_z,description,featured,sample,source_url,created_at,updated_at)
   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
 const now = new Date().toISOString();
-for (const item of sampleListings) {
-  insertListing.run(item.id,item.title,item.location,item.city,item.country,item.currency,item.mode,item.type,item.price,item.priceLabel || formatPrice(item.mode,item.price,item.currency),item.beds,item.baths,item.area,item.image,item.x,item.z,item.description,item.featured,item.sample ?? 1,item.sourceUrl ?? null,now,now);
-}
-database.exec(`UPDATE listings SET price = price * 100000
-  WHERE sample = 1 AND currency = 'INR' AND (
-    (mode = 'buy' AND price > 0 AND price < 10000) OR
-    (mode = 'rent' AND price > 0 AND price < 100)
-  )`);
-for (const item of sampleListings) {
-  database.prepare("UPDATE listings SET price_label=? WHERE id=?")
-    .run(item.priceLabel || formatPrice(item.mode,item.price,item.currency),item.id);
+const insertSampleListings = async (target) => {
+  for (const item of sampleListings) {
+    await target.prepare(`INSERT OR IGNORE INTO listings
+      (id,title,location,city,country,currency,mode,type,price,price_label,beds,baths,area,image,scene_x,scene_z,description,featured,sample,source_url,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(item.id,item.title,item.location,item.city,item.country,item.currency,item.mode,item.type,item.price,item.priceLabel || formatPrice(item.mode,item.price,item.currency),item.beds,item.baths,item.area,item.image,item.x,item.z,item.description,item.featured,item.sample ?? 1,item.sourceUrl ?? null,now,now);
+  }
+};
+if (database.remote) {
+  if (!(await database.prepare("SELECT id FROM listings LIMIT 1").get())) {
+    await database.transaction(insertSampleListings);
+  }
+} else {
+  for (const item of sampleListings) {
+    await insertListing.run(item.id,item.title,item.location,item.city,item.country,item.currency,item.mode,item.type,item.price,item.priceLabel || formatPrice(item.mode,item.price,item.currency),item.beds,item.baths,item.area,item.image,item.x,item.z,item.description,item.featured,item.sample ?? 1,item.sourceUrl ?? null,now,now);
+  }
+  await database.exec(`UPDATE listings SET price = price * 100000
+    WHERE sample = 1 AND currency = 'INR' AND (
+      (mode = 'buy' AND price > 0 AND price < 10000) OR
+      (mode = 'rent' AND price > 0 AND price < 100)
+    )`);
+  for (const item of sampleListings) {
+    await database.prepare("UPDATE listings SET price_label=? WHERE id=?")
+      .run(item.priceLabel || formatPrice(item.mode,item.price,item.currency),item.id);
+  }
 }
 
 const listingColumns = `SELECT id,title,location,city,country,currency,mode,type,price,price_label AS priceLabel,beds,baths,area,area_unit AS areaUnit,image,scene_x AS x,scene_z AS z,description,featured,sample,source_url AS sourceUrl,verified_at AS verifiedAt,created_at AS createdAt FROM listings`;
@@ -188,17 +197,17 @@ if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
     throw new Error("ADMIN_PASSWORD must be 14 to 72 bytes long.");
   }
   const email = process.env.ADMIN_EMAIL.trim().toLowerCase();
-  const existingAdmin = database.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  const existingAdmin = await database.prepare("SELECT id FROM users WHERE email = ?").get(email);
   if (!existingAdmin) {
     const passwordHash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12);
-    database.prepare("INSERT INTO users (id,name,email,password_hash,role,created_at) VALUES (?,?,?,?,?,?)")
+    await database.prepare("INSERT INTO users (id,name,email,password_hash,role,created_at) VALUES (?,?,?,?,?,?)")
       .run(randomUUID(), "PropertyHub Admin", email, passwordHash, "admin", now);
     console.info(`Admin account initialized for ${email}.`);
   }
 }
 
-database.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(Date.now());
-database.prepare("DELETE FROM password_resets WHERE expires_at <= ?").run(Date.now());
+await database.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(Date.now());
+await database.prepare("DELETE FROM password_resets WHERE expires_at <= ?").run(Date.now());
 
 const app = express();
 app.disable("x-powered-by");
@@ -257,10 +266,10 @@ function setSessionCookie(res, token) {
 function clearSessionCookie(res) {
   res.setHeader("Set-Cookie", `${cookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${production ? "; Secure" : ""}`);
 }
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const token = cookieToken(req);
   if (!token) return res.status(401).json({ error: "Sign in to continue." });
-  const user = database.prepare(`SELECT users.id,users.name,users.email,users.role FROM sessions
+  const user = await database.prepare(`SELECT users.id,users.name,users.email,users.role FROM sessions
     JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?`).get(tokenHash(token), Date.now());
   if (!user) return res.status(401).json({ error: "Your session has expired. Sign in again." });
   req.user = user;
@@ -357,7 +366,8 @@ const io = new Server(httpServer, {
 io.on("connection", (socket) => socket.emit("server:ready", { connectedAt: new Date().toISOString() }));
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok", realtime: true, timestamp: new Date().toISOString() }));
-app.get("/api/listings", (req, res) => {
+app.get("/api/listings", async (req, res, next) => {
+ try {
   const query = String(req.query.q || "").trim().slice(0, 100);
   const mode = ["buy", "rent", "commercial"].includes(req.query.mode) ? req.query.mode : "all";
   const types = Array.isArray(req.query.type) ? req.query.type : [req.query.type || "all"];
@@ -374,13 +384,16 @@ app.get("/api/listings", (req, res) => {
   if (Number.isFinite(maxPrice) && maxPrice > 0) { conditions.push("price <= ?"); values.push(maxPrice); }
   if (Number.isInteger(minBeds) && minBeds > 0 && minBeds <= 30) { conditions.push("beds >= ?"); values.push(minBeds); }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const listings = database.prepare(`${listingColumns} ${where} ORDER BY featured DESC, created_at DESC`).all(...values).map(toListing);
+  const listings = (await database.prepare(`${listingColumns} ${where} ORDER BY featured DESC, created_at DESC`).all(...values)).map(toListing);
   res.json({ listings, sampleData: true });
+ } catch (error) { next(error); }
 });
-app.get("/api/listings/:id", (req, res) => {
-  const listing = toListing(database.prepare(`${listingColumns} WHERE id = ? AND (sample = 1 OR julianday(verified_at) >= julianday('now', '-30 days'))`).get(req.params.id));
+app.get("/api/listings/:id", async (req, res, next) => {
+ try {
+  const listing = toListing(await database.prepare(`${listingColumns} WHERE id = ? AND (sample = 1 OR julianday(verified_at) >= julianday('now', '-30 days'))`).get(req.params.id));
   if (!listing) return res.status(404).json({ error: "Property not found." });
   res.json({ listing });
+ } catch (error) { next(error); }
 });
 app.post("/api/ai/search", aiSearchLimiter, requireAuth, async (req, res) => {
   const input = aiSearchInput.safeParse(req.body);
@@ -443,12 +456,12 @@ app.post("/api/auth/register", authLimiter, async (req, res, next) => {
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { name, email, password } = parsed.data;
     const normalizedEmail = email.toLowerCase();
-    if (database.prepare("SELECT id FROM users WHERE email = ?").get(normalizedEmail)) return res.status(409).json({ error: "An account already exists for that email." });
+    if (await database.prepare("SELECT id FROM users WHERE email = ?").get(normalizedEmail)) return res.status(409).json({ error: "An account already exists for that email." });
     const id = randomUUID();
     const passwordHash = await bcrypt.hash(password, 12);
-    database.prepare("INSERT INTO users (id,name,email,password_hash,role,created_at) VALUES (?,?,?,?,?,?)").run(id, name, normalizedEmail, passwordHash, "user", new Date().toISOString());
+    await database.prepare("INSERT INTO users (id,name,email,password_hash,role,created_at) VALUES (?,?,?,?,?,?)").run(id, name, normalizedEmail, passwordHash, "user", new Date().toISOString());
     const token = randomBytes(32).toString("base64url");
-    database.prepare("INSERT INTO sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").run(tokenHash(token), id, Date.now() + sessionDuration);
+    await database.prepare("INSERT INTO sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").run(tokenHash(token), id, Date.now() + sessionDuration);
     setSessionCookie(res, token);
     res.status(201).json({ user: { id, name, email: normalizedEmail, role: "user" } });
   } catch (error) { next(error); }
@@ -458,16 +471,16 @@ app.post("/api/auth/login", authLimiter, async (req, res, next) => {
     const parsed = z.object({ email: z.string().trim().email().max(254), password: z.string().min(1).max(128) }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Enter a valid email and password." });
     const email = parsed.data.email.toLowerCase();
-    const user = database.prepare("SELECT id,name,email,password_hash,role FROM users WHERE email=?").get(email);
+    const user = await database.prepare("SELECT id,name,email,password_hash,role FROM users WHERE email=?").get(email);
     const valid = user ? await bcrypt.compare(parsed.data.password, user.password_hash) : await bcrypt.compare(parsed.data.password, "$2b$12$C6UzMDM.H6dfI/f/IKcEe.0O5I9Nw8znG4gRNa9ehc3xQO2QV2P7e");
     if (!user || !valid) return res.status(401).json({ error: "Email or password is incorrect." });
     const token = randomBytes(32).toString("base64url");
-    database.prepare("INSERT INTO sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").run(tokenHash(token), user.id, Date.now() + sessionDuration);
+    await database.prepare("INSERT INTO sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").run(tokenHash(token), user.id, Date.now() + sessionDuration);
     setSessionCookie(res, token);
     res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
   } catch (error) { next(error); }
 });
-app.post("/api/auth/forgot-password", passwordResetLimiter, (req, res, next) => {
+app.post("/api/auth/forgot-password", passwordResetLimiter, async (req, res, next) => {
   if (production) {
     return res.status(503).json({ error: "Password reset email is not configured. Contact the site administrator." });
   }
@@ -475,11 +488,11 @@ app.post("/api/auth/forgot-password", passwordResetLimiter, (req, res, next) => 
   if (!parsed.success) return res.status(400).json({ error: "Enter a valid email address." });
   try {
     const email = parsed.data.email.toLowerCase();
-    const user = database.prepare("SELECT id FROM users WHERE email=?").get(email);
+    const user = await database.prepare("SELECT id FROM users WHERE email=?").get(email);
     if (user) {
       const token = randomBytes(32).toString("base64url");
-      database.prepare("DELETE FROM password_resets WHERE user_id=?").run(user.id);
-      database.prepare("INSERT INTO password_resets (token_hash,user_id,expires_at) VALUES (?,?,?)")
+      await database.prepare("DELETE FROM password_resets WHERE user_id=?").run(user.id);
+      await database.prepare("INSERT INTO password_resets (token_hash,user_id,expires_at) VALUES (?,?,?)")
         .run(tokenHash(token), user.id, Date.now() + passwordResetDuration);
       const resetUrl = new URL("/", appOrigin);
       resetUrl.hash = `password-reset=${token}`;
@@ -495,7 +508,7 @@ app.post("/api/auth/reset-password", passwordResetLimiter, async (req, res, next
   const parsed = passwordResetInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Enter a valid reset link and a password of at least 12 characters." });
   const hashedToken = tokenHash(parsed.data.token);
-  const resetAccount = database.prepare(`SELECT users.name,users.email FROM password_resets
+  const resetAccount = await database.prepare(`SELECT users.name,users.email FROM password_resets
     JOIN users ON users.id=password_resets.user_id WHERE password_resets.token_hash=? AND password_resets.expires_at>?`).get(hashedToken, Date.now());
   if (!resetAccount) {
     return res.status(400).json({ error: "This password reset link is invalid or expired. Request a new one." });
@@ -506,128 +519,136 @@ app.post("/api/auth/reset-password", passwordResetLimiter, async (req, res, next
   }
   try {
     const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-    database.exec("BEGIN IMMEDIATE");
-    try {
-      const reset = database.prepare("SELECT user_id FROM password_resets WHERE token_hash=? AND expires_at>?").get(hashedToken, Date.now());
-      if (!reset) {
-        database.exec("ROLLBACK");
-        return res.status(400).json({ error: "This password reset link is invalid or expired. Request a new one." });
-      }
-      database.prepare("UPDATE users SET password_hash=? WHERE id=?").run(passwordHash, reset.user_id);
-      database.prepare("DELETE FROM sessions WHERE user_id=?").run(reset.user_id);
-      database.prepare("DELETE FROM password_resets WHERE user_id=?").run(reset.user_id);
-      database.exec("COMMIT");
-    } catch (error) {
-      database.exec("ROLLBACK");
-      throw error;
-    }
+    const updated = await database.transaction(async (transaction) => {
+      const reset = await transaction.prepare("SELECT user_id FROM password_resets WHERE token_hash=? AND expires_at>?").get(hashedToken, Date.now());
+      if (!reset) return false;
+      await transaction.prepare("UPDATE users SET password_hash=? WHERE id=?").run(passwordHash, reset.user_id);
+      await transaction.prepare("DELETE FROM sessions WHERE user_id=?").run(reset.user_id);
+      await transaction.prepare("DELETE FROM password_resets WHERE user_id=?").run(reset.user_id);
+      return true;
+    });
+    if (!updated) return res.status(400).json({ error: "This password reset link is invalid or expired. Request a new one." });
     clearSessionCookie(res);
     res.status(204).end();
   } catch (error) { next(error); }
 });
-app.get("/api/auth/me", (req, res) => {
+app.get("/api/auth/me", async (req, res, next) => {
+ try {
   const token = cookieToken(req);
   if (!token) return res.json({ user: null });
-  const user = database.prepare(`SELECT users.id,users.name,users.email,users.role FROM sessions
+  const user = await database.prepare(`SELECT users.id,users.name,users.email,users.role FROM sessions
     JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?`).get(tokenHash(token), Date.now());
   res.json({ user: user || null });
+ } catch (error) { next(error); }
 });
-app.post("/api/auth/logout", requireAuth, (req, res) => {
-  database.prepare("DELETE FROM sessions WHERE token_hash=?").run(req.sessionTokenHash);
+app.post("/api/auth/logout", requireAuth, async (req, res, next) => {
+ try {
+  await database.prepare("DELETE FROM sessions WHERE token_hash=?").run(req.sessionTokenHash);
   clearSessionCookie(res);
   res.status(204).end();
+ } catch (error) { next(error); }
 });
 
-app.get("/api/favorites", requireAuth, (req, res) => {
-  const favorites = database.prepare(`SELECT listings.id,listings.title,listings.location,listings.city,listings.mode,listings.type,listings.price,listings.price_label AS priceLabel,listings.beds,listings.baths,listings.area,listings.image,listings.scene_x AS x,listings.scene_z AS z,listings.description,listings.featured,listings.sample,listings.created_at AS createdAt
-    FROM listings JOIN favorites ON favorites.listing_id=listings.id WHERE favorites.user_id=? AND (listings.sample=1 OR julianday(listings.verified_at) >= julianday('now','-30 days')) ORDER BY favorites.created_at DESC`).all(req.user.id).map(toListing);
+app.get("/api/favorites", requireAuth, async (req, res, next) => {
+ try {
+  const favorites = (await database.prepare(`SELECT listings.id,listings.title,listings.location,listings.city,listings.mode,listings.type,listings.price,listings.price_label AS priceLabel,listings.beds,listings.baths,listings.area,listings.image,listings.scene_x AS x,listings.scene_z AS z,listings.description,listings.featured,listings.sample,listings.created_at AS createdAt
+    FROM listings JOIN favorites ON favorites.listing_id=listings.id WHERE favorites.user_id=? AND (listings.sample=1 OR julianday(listings.verified_at) >= julianday('now','-30 days')) ORDER BY favorites.created_at DESC`).all(req.user.id)).map(toListing);
   res.json({ favorites });
+ } catch (error) { next(error); }
 });
-app.put("/api/favorites/:listingId", requireAuth, (req, res) => {
-  const exists = database.prepare("SELECT id FROM listings WHERE id=?").get(req.params.listingId);
+app.put("/api/favorites/:listingId", requireAuth, async (req, res, next) => {
+ try {
+  const exists = await database.prepare("SELECT id FROM listings WHERE id=?").get(req.params.listingId);
   if (!exists) return res.status(404).json({ error: "Property not found." });
-  database.prepare("INSERT OR IGNORE INTO favorites (user_id,listing_id,created_at) VALUES (?,?,?)").run(req.user.id, req.params.listingId, new Date().toISOString());
+  await database.prepare("INSERT OR IGNORE INTO favorites (user_id,listing_id,created_at) VALUES (?,?,?)").run(req.user.id, req.params.listingId, new Date().toISOString());
   res.status(204).end();
+ } catch (error) { next(error); }
 });
-app.delete("/api/favorites/:listingId", requireAuth, (req, res) => {
-  database.prepare("DELETE FROM favorites WHERE user_id=? AND listing_id=?").run(req.user.id, req.params.listingId);
+app.delete("/api/favorites/:listingId", requireAuth, async (req, res, next) => {
+ try {
+  await database.prepare("DELETE FROM favorites WHERE user_id=? AND listing_id=?").run(req.user.id, req.params.listingId);
   res.status(204).end();
+ } catch (error) { next(error); }
 });
 
-app.post("/api/inquiries", inquiryLimiter, requireAuth, (req, res) => {
+app.post("/api/inquiries", inquiryLimiter, requireAuth, async (req, res, next) => {
+ try {
   const parsed = inquiryInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   const input = parsed.data;
-  if (input.listingId && !database.prepare("SELECT id FROM listings WHERE id=?").get(input.listingId)) return res.status(404).json({ error: "Property not found." });
+  if (input.listingId && !await database.prepare("SELECT id FROM listings WHERE id=?").get(input.listingId)) return res.status(404).json({ error: "Property not found." });
   const id = randomUUID();
   const createdAt = new Date().toISOString();
-  database.prepare("INSERT INTO inquiries (id,user_id,listing_id,name,email,phone,message,created_at) VALUES (?,?,?,?,?,?,?,?)").run(id, req.user.id, input.listingId || null, input.name, req.user.email, input.phone, input.message, createdAt);
+  await database.prepare("INSERT INTO inquiries (id,user_id,listing_id,name,email,phone,message,created_at) VALUES (?,?,?,?,?,?,?,?)").run(id, req.user.id, input.listingId || null, input.name, req.user.email, input.phone, input.message, createdAt);
   io.emit("inquiries:new", { id, createdAt });
   res.status(201).json({ inquiry: { id, createdAt }, delivery: "stored-locally" });
+ } catch (error) { next(error); }
 });
-app.get("/api/my/inquiries", requireAuth, (req, res) => {
-  const inquiries = database.prepare(`SELECT inquiries.id,inquiries.message,inquiries.created_at AS createdAt,listings.title AS listingTitle,listings.location AS listingLocation
+app.get("/api/my/inquiries", requireAuth, async (req, res, next) => {
+ try {
+  const inquiries = await database.prepare(`SELECT inquiries.id,inquiries.message,inquiries.created_at AS createdAt,listings.title AS listingTitle,listings.location AS listingLocation
     FROM inquiries LEFT JOIN listings ON listings.id=inquiries.listing_id WHERE inquiries.user_id=? ORDER BY inquiries.created_at DESC`).all(req.user.id);
   res.json({ inquiries });
+ } catch (error) { next(error); }
 });
 
-app.get("/api/admin/stats", requireAuth, requireAdmin, (_req, res) => {
-  const listings = database.prepare("SELECT COUNT(*) AS count FROM listings WHERE sample=1 OR julianday(verified_at) >= julianday('now','-30 days')").get().count;
-  const inquiries = database.prepare("SELECT COUNT(*) AS count FROM inquiries").get().count;
-  const users = database.prepare("SELECT COUNT(*) AS count FROM users").get().count;
+app.get("/api/admin/stats", requireAuth, requireAdmin, async (_req, res) => {
+  const listings = Number((await database.prepare("SELECT COUNT(*) AS count FROM listings WHERE sample=1 OR julianday(verified_at) >= julianday('now','-30 days')").get()).count);
+  const inquiries = Number((await database.prepare("SELECT COUNT(*) AS count FROM inquiries").get()).count);
+  const users = Number((await database.prepare("SELECT COUNT(*) AS count FROM users").get()).count);
   res.json({ listings, inquiries, users });
 });
-app.get("/api/admin/inquiries", requireAuth, requireAdmin, (_req, res) => {
-  res.json({ inquiries: database.prepare(`SELECT inquiries.id,inquiries.name,inquiries.email,inquiries.phone,inquiries.message,inquiries.created_at AS createdAt,listings.title AS listingTitle
+app.get("/api/admin/inquiries", requireAuth, requireAdmin, async (_req, res) => {
+  res.json({ inquiries: await database.prepare(`SELECT inquiries.id,inquiries.name,inquiries.email,inquiries.phone,inquiries.message,inquiries.created_at AS createdAt,listings.title AS listingTitle
     FROM inquiries LEFT JOIN listings ON listings.id=inquiries.listing_id ORDER BY inquiries.created_at DESC LIMIT 200`).all() });
 });
-app.get("/api/admin/listings", requireAuth, requireAdmin, (_req, res) => {
-  res.json({ listings: database.prepare(`${listingColumns} ORDER BY verified_at DESC, created_at DESC`).all().map(toListing) });
+app.get("/api/admin/listings", requireAuth, requireAdmin, async (_req, res) => {
+  res.json({ listings: (await database.prepare(`${listingColumns} ORDER BY verified_at DESC, created_at DESC`).all()).map(toListing) });
 });
-app.post("/api/admin/listings", requireAuth, requireAdmin, (req, res) => {
+app.post("/api/admin/listings", requireAuth, requireAdmin, async (req, res) => {
   const parsed = listingInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   const listing = parsed.data;
   if (!listing.verified) return res.status(400).json({ error: "Confirm listing authorization, uniqueness, availability, price, and location before publishing." });
   const normalizedTitle = listing.title.normalize("NFKC").trim().toLocaleLowerCase();
   const normalizedCity = listing.city.normalize("NFKC").trim().toLocaleLowerCase();
-  const duplicate = database.prepare("SELECT title FROM listings WHERE lower(trim(title))=? AND lower(trim(city))=? LIMIT 1").get(normalizedTitle, normalizedCity);
+  const duplicate = await database.prepare("SELECT title FROM listings WHERE lower(trim(title))=? AND lower(trim(city))=? LIMIT 1").get(normalizedTitle, normalizedCity);
   if (duplicate) return res.status(409).json({ error: "A listing with this title already exists in this city. Review the existing record before adding another." });
   const id = randomUUID();
   const timestamp = new Date().toISOString();
   const x = Number(((Math.random() - 0.5) * 12).toFixed(2));
   const z = Number(((Math.random() - 0.5) * 12).toFixed(2));
-  database.prepare(`INSERT INTO listings (id,title,location,city,country,currency,mode,type,price,price_label,beds,baths,area,area_unit,image,scene_x,scene_z,description,featured,sample,source_url,verified_at,created_at,updated_at)
+  await database.prepare(`INSERT INTO listings (id,title,location,city,country,currency,mode,type,price,price_label,beds,baths,area,area_unit,image,scene_x,scene_z,description,featured,sample,source_url,verified_at,created_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)`).run(id,listing.title,listing.location,listing.city,listing.country,listing.currency,listing.mode,listing.type,listing.price,formatPrice(listing.mode,listing.price,listing.currency),listing.beds,listing.baths,listing.area,listing.areaUnit,listing.image,x,z,listing.description,listing.sourceUrl || null,timestamp,timestamp,timestamp);
-  const created = toListing(database.prepare(`${listingColumns} WHERE id=?`).get(id));
+  const created = toListing(await database.prepare(`${listingColumns} WHERE id=?`).get(id));
   io.emit("listings:changed", { action: "created", listing: created });
   res.status(201).json({ listing: created });
 });
-app.post("/api/admin/listings/:id/verify", requireAuth, requireAdmin, (req, res) => {
+app.post("/api/admin/listings/:id/verify", requireAuth, requireAdmin, async (req, res) => {
   if (req.body?.verified !== true) return res.status(400).json({ error: "Set verified to true after checking this listing." });
   const timestamp = new Date().toISOString();
-  const result = database.prepare("UPDATE listings SET verified_at=?,updated_at=? WHERE id=? AND sample=0").run(timestamp,timestamp,req.params.id);
+  const result = await database.prepare("UPDATE listings SET verified_at=?,updated_at=? WHERE id=? AND sample=0").run(timestamp,timestamp,req.params.id);
   if (!result.changes) return res.status(404).json({ error: "Non-demo listing not found." });
-  const listing = toListing(database.prepare(`${listingColumns} WHERE id=?`).get(req.params.id));
+  const listing = toListing(await database.prepare(`${listingColumns} WHERE id=?`).get(req.params.id));
   io.emit("listings:changed", { action: "updated", listing });
   res.json({ listing });
 });
-app.patch("/api/admin/listings/:id", requireAuth, requireAdmin, (req, res) => {
-  const current = toListing(database.prepare(`${listingColumns} WHERE id=?`).get(req.params.id));
+app.patch("/api/admin/listings/:id", requireAuth, requireAdmin, async (req, res) => {
+  const current = toListing(await database.prepare(`${listingColumns} WHERE id=?`).get(req.params.id));
   if (!current) return res.status(404).json({ error: "Property not found." });
   const parsed = listingInput.partial().safeParse(req.body);
   if (!parsed.success || Object.keys(parsed.data || {}).length === 0) return res.status(400).json({ error: parsed.success ? "Include at least one valid field." : parsed.error.issues[0].message });
   const updated = { ...current, ...parsed.data };
   updated.priceLabel = formatPrice(updated.mode, updated.price, updated.currency);
   const timestamp = new Date().toISOString();
-  database.prepare(`UPDATE listings SET title=?,location=?,city=?,country=?,currency=?,mode=?,type=?,price=?,price_label=?,beds=?,baths=?,area=?,area_unit=?,image=?,description=?,updated_at=? WHERE id=?`)
+  await database.prepare(`UPDATE listings SET title=?,location=?,city=?,country=?,currency=?,mode=?,type=?,price=?,price_label=?,beds=?,baths=?,area=?,area_unit=?,image=?,description=?,updated_at=? WHERE id=?`)
     .run(updated.title,updated.location,updated.city,updated.country,updated.currency,updated.mode,updated.type,updated.price,updated.priceLabel,updated.beds,updated.baths,updated.area,updated.areaUnit,updated.image,updated.description,timestamp,req.params.id);
-  const listing = toListing(database.prepare(`${listingColumns} WHERE id=?`).get(req.params.id));
+  const listing = toListing(await database.prepare(`${listingColumns} WHERE id=?`).get(req.params.id));
   io.emit("listings:changed", { action: "updated", listing });
   res.json({ listing });
 });
-app.delete("/api/admin/listings/:id", requireAuth, requireAdmin, (req, res) => {
-  const result = database.prepare("DELETE FROM listings WHERE id=?").run(req.params.id);
+app.delete("/api/admin/listings/:id", requireAuth, requireAdmin, async (req, res) => {
+  const result = await database.prepare("DELETE FROM listings WHERE id=?").run(req.params.id);
   if (!result.changes) return res.status(404).json({ error: "Property not found." });
   io.emit("listings:changed", { action: "deleted", id: req.params.id });
   res.status(204).end();
@@ -649,10 +670,14 @@ app.use((error, _req, res, _next) => {
   res.status(error.status || 500).json({ error: production ? "The request could not be completed." : error.message });
 });
 
-httpServer.listen(port, "127.0.0.1", () => {
-  console.info(`PropertyHub API listening at http://127.0.0.1:${port}`);
-  console.info(`Database: ${resolve(dataDirectory, "propertyhub.sqlite")}`);
-});
+if (!process.env.VERCEL) {
+  httpServer.listen(port, "127.0.0.1", () => {
+    console.info(`PropertyHub API listening at http://127.0.0.1:${port}`);
+    console.info(database.remote ? "Database: Neon Postgres" : `Database: ${resolve(root, "data", "propertyhub.sqlite")}`);
+  });
+}
+
+export default app;
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {

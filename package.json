@@ -11,12 +11,14 @@
     "dev:server": "node --env-file-if-exists=.env server.js",
     "dev:client": "vite --host 127.0.0.1",
     "build": "vite build",
+    "vercel-build": "npm run build && node scripts/copy-static.js",
     "start": "node --env-file-if-exists=.env server.js",
     "test": "node --test"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.2.6",
     "@fontsource/fraunces": "^5.2.6",
+    "@neondatabase/serverless": "^1.2.0",
     "bcryptjs": "^3.0.2",
     "compression": "^1.8.2",
     "express": "^5.2.1",
