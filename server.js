@@ -15,7 +15,8 @@ const root = dirname(fileURLToPath(import.meta.url));
 const production = process.env.NODE_ENV === "production";
 const port = Number(process.env.PORT || 3000);
 const vercelHost = production ? process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL : process.env.VERCEL_URL;
-const appOrigin = process.env.APP_ORIGIN || (vercelHost ? `https://${vercelHost}` : production ? `http://127.0.0.1:${port}` : "http://127.0.0.1:5173");
+const deployedOrigin = vercelHost ? `https://${vercelHost}` : process.env.RENDER_EXTERNAL_URL;
+const appOrigin = process.env.APP_ORIGIN || deployedOrigin || (production ? `http://127.0.0.1:${port}` : "http://127.0.0.1:5173");
 const sessionSecret = process.env.SESSION_SECRET || randomBytes(32).toString("hex");
 const cookieName = production ? "__Host-propertyhub" : "propertyhub_session";
 const sessionDuration = 7 * 24 * 60 * 60 * 1000;
@@ -671,8 +672,9 @@ app.use((error, _req, res, _next) => {
 });
 
 if (!process.env.VERCEL) {
-  httpServer.listen(port, "127.0.0.1", () => {
-    console.info(`PropertyHub API listening at http://127.0.0.1:${port}`);
+  const host = process.env.HOST || (process.env.RENDER ? "0.0.0.0" : "127.0.0.1");
+  httpServer.listen(port, host, () => {
+    console.info(`PropertyHub API listening at http://${host}:${port}`);
     console.info(database.remote ? "Database: Neon Postgres" : `Database: ${resolve(root, "data", "propertyhub.sqlite")}`);
   });
 }

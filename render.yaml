@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: propertyhub-realestate
+    runtime: node
+    region: virginia
+    plan: free
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false

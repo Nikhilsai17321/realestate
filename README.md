@@ -44,6 +44,10 @@ Configure a unique `SESSION_SECRET` in Vercel for Production and Preview. The Ne
 
 For a self-hosted production server, set `NODE_ENV=production`, `SESSION_SECRET`, `APP_ORIGIN` to the exact HTTPS origin, and admin credentials. Run `npm run build` and `npm start` behind a trusted HTTPS reverse proxy. Persist and back up SQLite's `data/` directory when using the local SQLite adapter; it is intentionally excluded from Git. Configure `TRUST_PROXY=true` only when the server is behind a trusted single proxy. Review the CSP and image allowlist if your approved listing image host changes.
 
+## Deploy to Render
+
+The root `render.yaml` defines a free Node web service connected to the `main` branch. It builds the client, runs the Express server, and uses `/api/health` for deploy health checks. Set `DATABASE_URL` to the Neon Postgres connection string in Render; Render generates a separate `SESSION_SECRET`. The service uses Render's `RENDER_EXTERNAL_URL` for same-origin checks. Free Render web services can spin down when idle, and the linked Neon database remains the persistent data store.
+
 ## Checks
 
 ```powershell
